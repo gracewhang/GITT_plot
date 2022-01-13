@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Jan  2 15:01:55 2022
+
+@author: gracewhang
+"""
+
+
+### Initialize + import libraries
+import numpy  as np
+import matplotlib.pyplot as plt
+
+from peakdetect import peakdetect #downloaded from github: https://gist.github.com/endolith/250860
+
+# code assumptions
+# GITT test starts off with lithiation (if you delithiate first, slight modifications need to be made to this code)
+# txt file should contains 2 columns: col 1: specific capacity col 2: voltage
+# txt file has first row headers (if yours does not, remove skiprows=1 from the data import code below)
+
+
+
+### Load file and obtain array data
+
+data = np.loadtxt("test.txt", delimiter='\t',skiprows=1) #delimiter=tab, skip first row with headers
+
+x = data[:, 0] #specific capacity column
+y = data[:, 1] #voltage column
+
+index=len(x) #set default index value to the entire length of the array
+#if data does not contain both lith and delith, by default it will just select all data
+
+
+### Split up lithiation form delithiation data
+# for loop scans through the capacity values and looks for when the capacity suddenly drop  (aka start of delith step)
+
+for i in range(1,len(x)):
+    if x[i-1]>x[i]: #if the previous element in the array is greater than one after
+        index=i #index value should be the last value in lithiation step
+        break #exit out of loop 
+
+
+
+lith_x=x[1:index] #lihtiation capacity values
+lith_y=y[1:index] #lithiation voltage values
+delith_x=x[index+1:] #delithiation values contain number after last 
+delith_y=y[index+1:] # lith all the way up to end of array
+
+
+
+### Find peaks using peakdetect from Github
+
+peaks = peakdetect(lith_y, lookahead=10) 
+# Lookahead is the distance to look ahead from a peak to determine if it is the actual peak. 
+# Change lookahead as necessary 
+
+higherPeaks = np.array(peaks[0]) #grabs local peak indices and correpsonding voltages
+lowerPeaks = np.array(peaks[1]) #grabs  loval valley indices and corresponding voltages
+
+h_peak_index=np.array(higherPeaks[:,0], dtype=int) #grab the index values of all the peaks and define array as integer values
+l_peak_index=np.array(lowerPeaks[:,0], dtype=int) #grab the index values of all the valley and define array as integer values
+
+
+### Let's plot stuff
+
+
+###Figure 1: Superimposed GITT data plot with peaks and valleys superimposed
+plt.figure(figsize=(5,5))  #defines figure size
+plt.rcParams['font.size'] = '20' #defines font size
+plt.xlabel('Specific Capacity [mAh/g]') #x label
+plt.ylabel('Voltage [V]') #y label
+
+
+plt.plot(lith_x,lith_y) #plot raw GITT data
+plt.plot(lith_x[h_peak_index], higherPeaks[:,1], 'ro') #plot peaks in red circles
+plt.plot(lith_x[l_peak_index], lowerPeaks[:,1], 'ko') #plot valleys in black circles 
+
+plt.show #reveal plot
+plt.savefig('GITT_plot.png',transparent=True,dpi=800) #save plot
+
+
+###Figure 2: 3x1 plot (original, with peaks, overpotential)
+plt.rcParams['font.size'] = '14' #define font size
+plt.figure(figsize= (9,9)) #define figure size
+
+plt.subplot(311)  #3x1, plot#1
+plt.ylabel('Voltage [V]') #define y label
+plt.plot(lith_x,lith_y) #plots raw GITT data
+
+
+
+plt.subplot(312) #3x1, plot#2
+plt.ylabel('Voltage [V]') #define y label
+
+
+plt.plot(lith_x,lith_y) #plots raw GITT
+
+#superimpose peak and valley markers
+plt.plot(lith_x[h_peak_index], higherPeaks[:,1], 'ro',markersize=3) #marker size 3
+plt.plot(lith_x[l_peak_index], lowerPeaks[:,1], 'ko',markersize=3)
+
+
+plt.subplot(313) #3x1, plot#3
+plt.xlabel('Specific Capacity [mAh/g]')
+plt.ylabel('Normalized Overpotential')
+
+
+
+higherPeaks_V=higherPeaks[:,1] #grab the voltage values of peaks 
+lowerPeaks_V=lowerPeaks[:,1] #grabs the voltage values of valleys
+
+
+#need to make sure the we have the same number of peaks and valleys
+if len(higherPeaks_V)!=len(lowerPeaks_V):   #if the number of elements in peaks and valleys are not the same,
+    if len(higherPeaks_V)>len(lowerPeaks_V): #if peaks has more elements
+        higherPeaks_V=higherPeaks_V[:-1] #removes last element of peaks array
+        l_peak_index=l_peak_index[:-1] #removes last element in peak index
+
+    if len(higherPeaks_V)<len(lowerPeaks_V): #if valleys has more elements
+        lowerPeaks_V=lowerPeaks_V[:-1] #removes last element in valley array
+        l_peak_index=l_peak_index[:-1]  #removes last element in peak index
+        
+
+#estimation of the overpotential
+overpotential=higherPeaks_V-lowerPeaks_V #subtract peak from valley values
+max_overpotential=max(overpotential) #find the max overpotential
+normalized_overpotential=overpotential/max_overpotential #divide by max to normalize
+
+#plot the normalized overpotential
+plt.plot(lith_x[l_peak_index],normalized_overpotential,'bo',markersize=4)
+
+
+plt.show #reveal plot
+plt.savefig('GITT_3x1_plot.png',transparent=True,dpi=800) #save plot
+
